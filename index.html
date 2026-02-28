@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Claude Monitor</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Claude Monitor">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+        
+        /* === THEMES === */
+        :root {
+            --bg: #000000;
+            --card-bg: #111111;
+            --card-border: #333333;
+            --text-primary: #ff8c00;
+            --text-secondary: #ffb347;
+            --text-dim: rgba(255, 140, 0, 0.7);
+            --bar-bg: #333333;
+            --bar-fill-start: #ff8c00;
+            --bar-fill-end: #ffb347;
+            --bar-glow: rgba(255, 140, 0, 0.3);
+            --accent: #ff8c00;
+        }
+
+        [data-theme="claude-code"] {
+            --bg: #1a1a2e;
+            --card-bg: #16213e;
+            --card-border: #2a2a4a;
+            --text-primary: #e8916e;
+            --text-secondary: #d4a88c;
+            --text-dim: rgba(232, 145, 110, 0.6);
+            --bar-bg: #2a2a4a;
+            --bar-fill-start: #e8916e;
+            --bar-fill-end: #d4a88c;
+            --bar-glow: rgba(232, 145, 110, 0.3);
+            --accent: #b8a9ff;
+        }
+
+        [data-theme="matrix"] {
+            --bg: #0a0a0a;
+            --card-bg: #0d1a0d;
+            --card-border: #1a3a1a;
+            --text-primary: #00ff41;
+            --text-secondary: #00cc33;
+            --text-dim: rgba(0, 255, 65, 0.6);
+            --bar-bg: #1a3a1a;
+            --bar-fill-start: #00ff41;
+            --bar-fill-end: #00cc33;
+            --bar-glow: rgba(0, 255, 65, 0.3);
+            --accent: #00ff41;
+        }
+
+
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 1.4;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+
+        /* ======== DEFAULT VIEW (cards) ======== */
+        .container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header { text-align: center; margin-bottom: 30px; }
+        .title { font-size: 24px; font-weight: 700; margin-bottom: 8px; text-shadow: 0 0 10px var(--accent); }
+        .subtitle { font-size: 12px; opacity: 0.8; }
+        .plan-info { font-size: 14px; margin-bottom: 25px; text-align: center; opacity: 0.9; }
+
+        .controls {
+            position: fixed; top: 12px; right: 12px; z-index: 100;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+        }
+        .theme-selector { display: flex; gap: 6px; }
+        .refresh-selector { display: flex; gap: 4px; }
+
+        .theme-dot {
+            width: 20px; height: 20px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.2);
+            cursor: pointer; transition: transform 0.2s, border-color 0.2s;
+        }
+        .theme-dot:hover, .theme-dot.active { transform: scale(1.3); border-color: rgba(255,255,255,0.8); }
+        .theme-dot[data-t="default"]    { background: #ff8c00; }
+        .theme-dot[data-t="claude-code"] { background: #e8916e; }
+        .theme-dot[data-t="matrix"]      { background: #00ff41; }
+
+        .refresh-btn {
+            background: var(--card-bg); color: var(--text-dim);
+            border: 1px solid var(--card-border); border-radius: 4px;
+            padding: 2px 6px; font-family: inherit; font-size: 10px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .refresh-btn.active { color: var(--text-primary); border-color: var(--accent); background: var(--bar-bg); }
+
+        .usage-section { width: 100%; max-width: 600px; }
+
+        .usage-item {
+            margin-bottom: 18px; padding: 15px 20px;
+            background-color: var(--card-bg); border-radius: 8px;
+            border: 1px solid var(--card-border); transition: all 0.4s ease;
+        }
+        .usage-item:hover { border-color: var(--accent); box-shadow: 0 0 15px var(--bar-glow); }
+        .usage-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .usage-label { font-size: 16px; font-weight: 500; }
+        .usage-percent { font-size: 20px; font-weight: 700; }
+
+        /* Circular refresh timer */
+        .refresh-ring-wrap {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .refresh-ring-wrap svg {
+            transform: rotate(-90deg);
+            width: 20px;
+            height: 20px;
+            display: block;
+        }
+        .refresh-ring-bg {
+            fill: none;
+            stroke: var(--bar-bg);
+            stroke-width: 3.5;
+        }
+        .refresh-ring-fg {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 3.5;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s linear;
+            filter: drop-shadow(0 0 3px var(--bar-glow));
+        }
+
+        .usage-bar {
+            width: 100%; height: 14px;
+            background-color: var(--bar-bg); border-radius: 7px;
+            overflow: hidden; margin-bottom: 6px;
+        }
+        .usage-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--bar-fill-start), var(--bar-fill-end));
+            border-radius: 7px; transition: width 0.8s ease-in-out, background 0.4s ease;
+            box-shadow: 0 0 10px var(--bar-glow);
+        }
+        .usage-reset { font-size: 11px; color: var(--text-dim); text-align: right; }
+
+        .status { text-align: center; margin-top: 25px; padding: 10px; font-size: 11px; color: var(--text-dim); }
+        .error { color: #ff6b6b; text-align: center; padding: 20px; }
+        .loading { text-align: center; opacity: 0.7; }
+        .pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+
+        /* ======== CLI VIEW (claude-code theme) ======== */
+        .cli-view { display: none; }
+
+        [data-theme="claude-code"] .default-view { display: none; }
+        [data-theme="claude-code"] .cli-view { display: flex; }
+        [data-theme="claude-code"] body {
+            background: #000 !important;
+            color: #e8916e !important;
+        }
+        [data-theme="claude-code"] .controls {
+            top: 8px; right: 8px;
+        }
+
+        .cli-view {
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px 30px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .cli-center {
+            width: 100%;
+            max-width: 700px;
+            padding: 0 30px;
+        }
+
+        .cli-header {
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 6px 12px;
+            margin-bottom: 16px;
+            display: inline-block;
+            font-size: 13px;
+        }
+
+        .cli-header .star { color: #e8916e; }
+        .cli-header .bold { color: #fff; font-weight: 700; }
+        .cli-header .dim { color: #888; }
+
+        .cli-plan {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 16px;
+        }
+
+        .cli-row {
+            margin-bottom: 14px;
+        }
+
+        .cli-row-top {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .cli-row-label {
+            color: #888;
+            font-size: 13px;
+        }
+
+        .cli-row-value {
+            color: #fff;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .cli-ascii-bar {
+            font-size: 12px;
+            margin-bottom: 3px;
+            line-height: 1.2;
+            letter-spacing: 0px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .cli-ascii-bar .filled { color: #e8916e; }
+        .cli-ascii-bar .empty { color: #444; }
+
+        .cli-bar-reset {
+            font-size: 10px;
+            color: #555;
+            text-align: right;
+        }
+
+        .cli-prompt {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #555;
+        }
+
+        .cli-prompt .caret {
+            color: #e8916e;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .cli-status {
+            margin-top: 12px;
+            font-size: 10px;
+            color: #444;
+        }
+
+        /* CLI landscape tweaks */
+        @media screen and (orientation: landscape) and (max-height: 500px) {
+            .cli-view { padding: 10px 20px; }
+            .cli-row { margin-bottom: 8px; }
+            .cli-header { font-size: 11px; padding: 4px 8px; margin-bottom: 8px; }
+            .cli-row-label { font-size: 11px; }
+            .cli-row-value { font-size: 18px; }
+            .cli-ascii-bar { font-size: 11px; }
+            .cli-prompt { margin-top: 8px; font-size: 10px; }
+        }
+
+        /* Default view landscape */
+        @media screen and (orientation: landscape) and (max-height: 500px) {
+            .container { padding: 10px 20px; }
+            .header { margin-bottom: 15px; }
+            .title { font-size: 18px; }
+            .usage-item { margin-bottom: 12px; padding: 10px 15px; }
+            .usage-label { font-size: 14px; }
+            .usage-percent { font-size: 16px; }
+            .usage-bar { height: 12px; border-radius: 6px; }
+            .usage-fill { border-radius: 6px; }
+            .status { margin-top: 10px; }
+            .theme-dot { width: 16px; height: 16px; }
+            .refresh-btn { font-size: 9px; padding: 1px 5px; }
+            .refresh-ring-wrap { width: 16px; height: 16px; }
+            .refresh-ring-wrap svg { width: 16px; height: 16px; }
+        }
+
+        @media screen and (max-width: 480px) and (orientation: landscape) {
+            body { font-size: 12px; }
+            .title { font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div class="theme-selector">
+            <div class="theme-dot active" data-t="default" title="Orange"></div>
+            <div class="theme-dot" data-t="claude-code" title="Claude Code CLI"></div>
+            <div class="theme-dot" data-t="matrix" title="Matrix"></div>
+        </div>
+        <div class="refresh-selector">
+            <div class="refresh-btn" data-r="60000">1m</div>
+            <div class="refresh-btn active" data-r="300000">5m</div>
+        </div>
+    </div>
+
+    <!-- ======== DEFAULT VIEW ======== -->
+    <div class="default-view">
+        <div class="container">
+            <div class="header">
+                <div class="title">⚡ CLAUDE MONITOR</div>
+                <div class="subtitle">Real-time usage tracking</div>
+            </div>
+            
+            <div id="loading" class="loading pulse">Connecting to Claude API...</div>
+
+            <div id="content" style="display: none;">
+                <div id="plan-info" class="plan-info"></div>
+                <div class="usage-section">
+                    <div class="usage-item">
+                        <div class="usage-top">
+                            <div class="usage-label">5h</div>
+                            <div class="refresh-ring-wrap" title="Next refresh">
+                                <svg viewBox="0 0 36 36">
+                                    <circle class="refresh-ring-bg" cx="18" cy="18" r="15"/>
+                                    <circle id="refresh-ring" class="refresh-ring-fg" cx="18" cy="18" r="15"
+                                        stroke-dasharray="94.25" stroke-dashoffset="0"/>
+                                </svg>
+                            </div>
+                            <div id="five-hour-percent" class="usage-percent">--%</div>
+                        </div>
+                        <div class="usage-bar">
+                            <div id="five-hour-fill" class="usage-fill" style="width: 0%"></div>
+                        </div>
+                        <div id="five-hour-reset" class="usage-reset">Resets in --</div>
+                    </div>
+                    <div class="usage-item">
+                        <div class="usage-top">
+                            <div class="usage-label">7d</div>
+                            <div id="seven-day-percent" class="usage-percent">--%</div>
+                        </div>
+                        <div class="usage-bar">
+                            <div id="seven-day-fill" class="usage-fill" style="width: 0%"></div>
+                        </div>
+                        <div id="seven-day-reset" class="usage-reset">Resets in --</div>
+                    </div>
+                    <div class="usage-item">
+                        <div class="usage-top">
+                            <div class="usage-label">Sonnet</div>
+                            <div id="sonnet-percent" class="usage-percent">--%</div>
+                        </div>
+                        <div class="usage-bar">
+                            <div id="sonnet-fill" class="usage-fill" style="width: 0%"></div>
+                        </div>
+                        <div id="sonnet-reset" class="usage-reset">7-day window</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error" class="error" style="display: none;"></div>
+            <div class="status">
+                <div>Last updated: <span id="last-updated">--</span></div>
+                <div>Next refresh: <span id="next-refresh">--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======== CLI VIEW (Claude Code theme) ======== -->
+    <div class="cli-view">
+        <div class="cli-center">
+            <div class="cli-header">
+                <span class="star">✻</span> <span class="dim">Welcome to</span> <span class="bold">Claude Monitor</span> <span class="dim">v1.0</span>
+            </div>
+
+            <div id="cli-loading" class="loading pulse" style="color: #888; font-size: 12px;">
+                $ fetching usage data...
+            </div>
+
+            <div id="cli-content" style="display: none;">
+                <div id="cli-plan" class="cli-plan"></div>
+
+                <div class="cli-row">
+                    <div class="cli-row-top">
+                        <span class="cli-row-label">5h_limit</span>
+                        <span id="cli-5h-val" class="cli-row-value">--%</span>
+                    </div>
+                    <div id="cli-5h-bar" class="cli-ascii-bar"></div>
+                    <div id="cli-5h-reset" class="cli-bar-reset">resets_at: --</div>
+                </div>
+
+                <div class="cli-row">
+                    <div class="cli-row-top">
+                        <span class="cli-row-label">7d_limit</span>
+                        <span id="cli-7d-val" class="cli-row-value">--%</span>
+                    </div>
+                    <div id="cli-7d-bar" class="cli-ascii-bar"></div>
+                    <div id="cli-7d-reset" class="cli-bar-reset">resets_at: --</div>
+                </div>
+
+                <div class="cli-row">
+                    <div class="cli-row-top">
+                        <span class="cli-row-label">sonnet_7d</span>
+                        <span id="cli-sonnet-val" class="cli-row-value">--%</span>
+                    </div>
+                    <div id="cli-sonnet-bar" class="cli-ascii-bar"></div>
+                    <div class="cli-bar-reset">window: 7 days</div>
+                </div>
+            </div>
+
+            <div class="cli-prompt">
+                <span style="color: #888;">$</span> <span class="caret">█</span>
+            </div>
+
+            <div class="cli-status">
+                updated: <span id="cli-updated">--</span> · next: <span id="cli-next">--</span>
+            </div>
+        </div> <!-- cli-center -->
+    </div>
+
+    <script>
+        let refreshInterval;
+        let nextRefreshTimeout;
+        let lastFetchTime = 0;
+        let REFRESH_INTERVAL = parseInt(localStorage.getItem('claude-monitor-refresh')) || 300000;
+        let currentTheme = 'default';
+
+        // === THEME ===
+        function setTheme(name) {
+            currentTheme = name;
+            if (name === 'default') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', name);
+            }
+            document.querySelectorAll('.theme-dot').forEach(d => {
+                d.classList.toggle('active', d.dataset.t === name);
+            });
+            localStorage.setItem('claude-monitor-theme', name);
+        }
+
+        document.querySelectorAll('.theme-dot').forEach(dot => {
+            dot.addEventListener('click', () => setTheme(dot.dataset.t));
+        });
+
+        const savedTheme = localStorage.getItem('claude-monitor-theme');
+        if (savedTheme) setTheme(savedTheme);
+
+        // === REFRESH RATE ===
+        function setRefreshRate(ms) {
+            REFRESH_INTERVAL = ms;
+            localStorage.setItem('claude-monitor-refresh', ms);
+            document.querySelectorAll('.refresh-btn').forEach(b => {
+                b.classList.toggle('active', parseInt(b.dataset.r) === ms);
+            });
+            startRefreshTimer();
+        }
+
+        document.querySelectorAll('.refresh-btn').forEach(btn => {
+            btn.addEventListener('click', () => setRefreshRate(parseInt(btn.dataset.r)));
+        });
+
+        document.querySelectorAll('.refresh-btn').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.r) === REFRESH_INTERVAL);
+        });
+
+        // === ASCII BAR ===
+        const BAR_CHAR_FILL = '█';
+        const BAR_CHAR_EMPTY = '░';
+        const BAR_WIDTH = 65;
+        function renderAsciiBar(elementId, percent) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            const filled = Math.round((percent / 100) * BAR_WIDTH);
+            const empty = BAR_WIDTH - filled;
+            el.innerHTML = '<span class="filled">' + BAR_CHAR_FILL.repeat(filled) + '</span><span class="empty">' + BAR_CHAR_EMPTY.repeat(empty) + '</span>';
+        }
+
+        // === USAGE ===
+        function formatTimeToReset(resetTime) {
+            try {
+                const now = new Date();
+                const reset = new Date(resetTime);
+                const diff = reset - now;
+                if (diff <= 0) return 'now';
+
+                const clockTime = reset.toLocaleTimeString('en-US', {
+                    hour: 'numeric', minute: '2-digit', hour12: true
+                });
+
+                const minutes = Math.floor(diff / 60000);
+                let relative;
+                if (minutes < 60) {
+                    relative = `${minutes}m`;
+                } else {
+                    const hours = Math.floor(minutes / 60);
+                    const rm = minutes % 60;
+                    if (hours < 24) {
+                        relative = rm ? `${hours}h${rm}m` : `${hours}h`;
+                    } else {
+                        const days = Math.floor(hours / 24);
+                        const rh = hours % 24;
+                        relative = rh ? `${days}d${rh}h` : `${days}d`;
+                    }
+                }
+                return `${relative} (${clockTime})`;
+            } catch { return '?'; }
+        }
+
+        const RING_CIRCUMFERENCE = 94.25; // 2 * PI * 15
+
+        function updateCountdown() {
+            if (!lastFetchTime) return;
+            const elapsed = Date.now() - lastFetchTime;
+            const remaining = REFRESH_INTERVAL - elapsed;
+            const progress = Math.min(elapsed / REFRESH_INTERVAL, 1);
+
+            // Update circular ring
+            const ring = document.getElementById('refresh-ring');
+            if (ring) {
+                ring.style.strokeDashoffset = RING_CIRCUMFERENCE * (1 - progress);
+            }
+
+            if (remaining > 0) {
+                const m = Math.floor(remaining / 60000);
+                const s = Math.floor((remaining % 60000) / 1000);
+                const txt = `${m}:${s.toString().padStart(2, '0')}`;
+                document.getElementById('next-refresh').textContent = txt;
+                document.getElementById('cli-next').textContent = txt;
+            } else {
+                document.getElementById('next-refresh').textContent = 'refreshing...';
+                document.getElementById('cli-next').textContent = 'refreshing...';
+            }
+        }
+
+        async function fetchUsage() {
+            try {
+                // Show loading on both views
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('content').style.display = 'none';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('cli-loading').style.display = 'block';
+                document.getElementById('cli-content').style.display = 'none';
+
+                const response = await fetch('/api/usage');
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'API request failed');
+
+                lastFetchTime = Date.now();
+                const timeStr = new Date().toLocaleTimeString('en-US', {
+                    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+
+                // === Update DEFAULT view ===
+                document.getElementById('plan-info').textContent = `${data.plan} • ${data.rate_limit_tier || ''}`;
+
+                if (data.five_hour) {
+                    const p = data.five_hour.utilization || 0;
+                    document.getElementById('five-hour-percent').textContent = `${p}%`;
+                    document.getElementById('five-hour-fill').style.width = `${p}%`;
+                    document.getElementById('five-hour-reset').textContent = `Resets in ${formatTimeToReset(data.five_hour.resets_at)}`;
+                }
+                if (data.seven_day) {
+                    const p = data.seven_day.utilization || 0;
+                    document.getElementById('seven-day-percent').textContent = `${p}%`;
+                    document.getElementById('seven-day-fill').style.width = `${p}%`;
+                    document.getElementById('seven-day-reset').textContent = `Resets in ${formatTimeToReset(data.seven_day.resets_at)}`;
+                }
+                if (data.seven_day_sonnet) {
+                    const p = data.seven_day_sonnet.utilization || 0;
+                    document.getElementById('sonnet-percent').textContent = `${p}%`;
+                    document.getElementById('sonnet-fill').style.width = `${p}%`;
+                }
+                document.getElementById('last-updated').textContent = timeStr;
+
+                // === Update CLI view ===
+                document.getElementById('cli-plan').textContent = `$ plan: ${data.plan} (${data.rate_limit_tier || ''})`;
+
+                if (data.five_hour) {
+                    const p = data.five_hour.utilization || 0;
+                    document.getElementById('cli-5h-val').textContent = `${p}%`;
+                    renderAsciiBar('cli-5h-bar', p);
+                    document.getElementById('cli-5h-reset').textContent = `resets_at: ${formatTimeToReset(data.five_hour.resets_at)}`;
+                }
+                if (data.seven_day) {
+                    const p = data.seven_day.utilization || 0;
+                    document.getElementById('cli-7d-val').textContent = `${p}%`;
+                    renderAsciiBar('cli-7d-bar', p);
+                    document.getElementById('cli-7d-reset').textContent = `resets_at: ${formatTimeToReset(data.seven_day.resets_at)}`;
+                }
+                if (data.seven_day_sonnet) {
+                    const p = data.seven_day_sonnet.utilization || 0;
+                    document.getElementById('cli-sonnet-val').textContent = `${p}%`;
+                    renderAsciiBar('cli-sonnet-bar', p);
+                }
+                document.getElementById('cli-updated').textContent = timeStr;
+
+                // Show content
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('cli-loading').style.display = 'none';
+                document.getElementById('cli-content').style.display = 'block';
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = `Error: ${error.message}`;
+                document.getElementById('cli-loading').textContent = `$ error: ${error.message}`;
+            }
+        }
+
+        function startRefreshTimer() {
+            clearInterval(refreshInterval);
+            clearInterval(nextRefreshTimeout);
+            nextRefreshTimeout = setInterval(updateCountdown, 1000);
+            refreshInterval = setInterval(fetchUsage, REFRESH_INTERVAL);
+        }
+
+        function preventSleep() {
+            const v = document.createElement('video');
+            v.muted = true; v.loop = true; v.style.display = 'none';
+            document.body.appendChild(v);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchUsage();
+            startRefreshTimer();
+            preventSleep();
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) { fetchUsage(); startRefreshTimer(); }
+            });
+        });
+    </script>
+</body>
+</html>

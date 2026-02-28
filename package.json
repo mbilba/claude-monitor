@@ -1,0 +1,27 @@
+{
+  "name": "claude-monitor",
+  "version": "1.0.0",
+  "description": "Real-time Claude usage monitoring dashboard",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Static build complete'",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vercel": "^34.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "claude",
+    "anthropic",
+    "monitoring",
+    "dashboard",
+    "usage"
+  ],
+  "author": "",
+  "license": "MIT"
+}
