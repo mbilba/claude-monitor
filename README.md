@@ -1,6 +1,6 @@
 # Claude Monitor 📊
 
-Una "maquinita de monitoreo" retro para visualizar tu consumo de Claude en tiempo real desde un iPhone viejo.
+Una "maquinita de monitoreo" retro para visualizar tu consumo de Claude en tiempo real desde una pantalla extra.
 
 ## 🚀 Features
 
